@@ -1,6 +1,7 @@
 .DS_Store
 architecture_diagram.pages
 architecture_diagram.docx
+architecture_diagram.pdf
 
 # Python-generated files
 __pycache__/
