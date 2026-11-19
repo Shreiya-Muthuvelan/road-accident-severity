@@ -38,7 +38,7 @@ from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, StandardScaler
 from train_logreg_imbalance import CATEGORICAL_COLS, NUMERIC_COLS, engineer_features
 
 from location_features import LocationEncoder, LOC_RAW, LOC_TE
-# raw coords + 2 target-encoded cells are all numeric
+# raw coords + 2 target encoded cells are all numeric
 NUM_ALL = NUMERIC_COLS + LOC_RAW + LOC_TE
 
 LOG = logging.getLogger(__name__)
@@ -238,7 +238,7 @@ def run_holdout_cv(df, target, models, strategies, thresholds, n_splits):
     for model_name in models:
         grp = cv_summary[cv_summary["model"] == model_name]
         # Selection uses the development CV ONLY. Optimize balanced accuracy;
-        # tie-break with F1, then recall, then lower threshold.
+        # tie-break with F1, then recall, then lower threshold
         sel = grp.sort_values(
             ["balanced_acc", "f1_score", "recall", "threshold"],
             ascending=[False, False, False, True], kind="stable",
@@ -247,7 +247,7 @@ def run_holdout_cv(df, target, models, strategies, thresholds, n_splits):
         LOG.info("%s: CV selected %s, threshold %.3f, CV balanced acc %.4f, CV ROC-AUC %.4f",
                  model_name, strategy, threshold, sel["balanced_acc"], sel["roc_auc"])
 
-        # Refit on the FULL 80% with fresh preprocessing / sampling, score holdout once.
+        # Refit on the FULL 80% with fresh preprocessing / sampling, score holdout once
         clf, transform = fit_model(model_name, strategy, X_dev, y_dev, seed=42)
         positive_ix = list(clf.classes_).index(1)
         probs = clf.predict_proba(transform(X_test))[:, positive_ix]

@@ -41,10 +41,10 @@ NUM_ALL = NUMERIC_COLS + LOC_RAW + LOC_TE
 LOG = logging.getLogger(__name__)
 ALL_STRATEGIES = ("S0", "S1", "S2", "S3", "S4")
 # strategy -> balancing-strength values swept in CV
-#   S1: positive-class weight   S2/S3: SMOTENC minority:majority ratio   S4: ADASYN ratio
+# S1: positive-class weight   S2/S3: SMOTENC minority:majority ratio   S4: ADASYN ratio
 PARAM_GRID = {
     "S0": [0.0],               # no balancing, placeholder so the column is numeric
-    "S1": [1.5, 2.0, 3.0],     # 3.0 is roughly "balanced" for your ~24% positives
+    "S1": [1.5, 2.0, 3.0],     # 3.0 is roughly balanced for our 24% positives
     "S2": [0.5, 0.75, 1.0],
     "S3": [0.5, 0.75, 1.0],
     "S4": [0.75, 1.0],
