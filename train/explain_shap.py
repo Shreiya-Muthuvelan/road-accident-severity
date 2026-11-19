@@ -11,7 +11,7 @@ Outputs (in --out-dir):
   shap_dependence_<feat>.png    dependence plot for the top numeric feature
   shap_waterfall_top_risk.png   local explanation for the highest-risk sample
 
-This file imports fit_model from train_combination_2.py, which must be
+This file imports fit_model from train_with_shap.py, which must be
 available in the train folder and attach transform.feature_names /
 transform.feature_groups. Example (from FINAL_CODES/):
     python train/explain_shap.py --model xgboost --strategy S0 --n-samples 3000
@@ -31,7 +31,7 @@ from sklearn.model_selection import train_test_split
 
 from train_logreg_imbalance import CATEGORICAL_COLS, NUMERIC_COLS, engineer_features
 from location_features import LOC_RAW, LOC_TE
-from train_combination_2 import fit_model
+from train_with_shap import fit_model
 
 LOG = logging.getLogger(__name__)
 

@@ -7,7 +7,7 @@ The script fits the requested strategy on a stratified 80% development split
 and scores the untouched 20% holdout at a fixed threshold. It uses the full
 holdout for confusion counts and motorcycle-group rates, then calculates SHAP
 on a reproducible sample from each non-empty confusion-matrix group.
-It imports fit_model from train_combination_2.py, which must be available in
+It imports fit_model from train_with_shap.py, which must be available in
 the train folder.
 """
 import argparse
@@ -24,7 +24,7 @@ from scipy import sparse
 from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import train_test_split
 
-from train_combination_2 import fit_model, NUM_ALL
+from train_with_shap import fit_model, NUM_ALL
 from train_logreg_imbalance import CATEGORICAL_COLS, NUMERIC_COLS, engineer_features
 from location_features import LOC_RAW
 
