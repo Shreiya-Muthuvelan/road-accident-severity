@@ -121,6 +121,17 @@ python train/train_logreg_imbalance.py --in data/collisions_clean.parquet --targ
 
 This experiment writes `report/logreg_results.csv` and `report/logreg_results_summary.csv`. It uses repeated stratified CV and reserves 25% of each outer training partition to tune a threshold by F2. It compares that threshold with 0.5. Strategy S5 is the output label for the tuned S0 result. The outer test folds supply the evaluation scores.
 
+## Final results
+
+These results are from the final holdout evaluation on 62,231 collisions. [Holdout results CSV](report/final_results/FINAL_all_model_results_holdout.csv)
+
+| Model | Accuracy | Balanced accuracy | Precision | Recall | F1-score | ROC-AUC |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Logistic Regression | 64.03% | 63.58% | 35.89% | 62.70% | 45.65% | 0.6878 |
+| Random Forest | **68.28%** | 63.71% | **38.80%** | 54.89% | 45.46% | 0.6985 |
+| LightGBM | 64.00% | 64.25% | 36.18% | **64.73%** | 46.42% | 0.7026 |
+| XGBoost | 64.63% | **64.32%** | 36.56% | 63.71% | **46.46%** | **0.7038** |
+
 ## Reproducibility
 
 - The final experiment uses seed **42** for the stratified holdout, shuffled development CV, and final refit. Development folds use seeds **999 + fold number** for the seeded training steps.
