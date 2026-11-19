@@ -42,8 +42,8 @@ Steps 1 and 2 below regenerate both Parquet files from the CSVs.
 │   ├── location_features.py                  # Out-of-fold location target encoding
 │   ├── train_with_shap.py                    # Four-model CV and final holdout evaluation
 │   ├── tuning_of_sampling_techniques.py      # Compares class weights and sampling ratios
-│   ├── explain_shap.py                       # Generates SHAP explanations¹
-│   └── analyze_false_positives_shap.py       # Analyzes false positives using SHAP¹
+│   ├── explain_shap.py                       # Generates SHAP explanations
+│   └── analyze_false_positives_shap.py       # Analyzes false positives using SHAP
 │
 ├── report/                                   # Saved results and figures
 │   ├── figures/                              # Exploratory plots and a saved confusion matrix
@@ -56,8 +56,6 @@ Steps 1 and 2 below regenerate both Parquet files from the CSVs.
 ├── requirements.txt                          # Python dependencies
 └── README.md                                 # Project overview and run commands
 ```
-
-¹ Both SHAP scripts require `train_combination_2.py`, which is absent from this checkout.
 
 ## Run the project
 
