@@ -1,26 +1,17 @@
-"""RF / LightGBM / XGBoost severity evaluation with FIXED thresholds.
+"""Fit a chosen model and strategy, then explain its predictions with SHAP.
 
-Protocol (identical for every model)
-------------------------------------
-1. A stratified 20% holdout is split off first (random_state=42) and is NOT
-   touched until the very end. The same rows are used for every model.
-2. On the remaining 80% ("development" set), stratified 5-fold CV is run for
-   every (model, strategy, threshold) combination. Encoders, imputer and
-   resamplers are fitted on the training portion of each fold only.
-3. For each model SEPARATELY, the (strategy, threshold) pair with the best mean
-   CV balanced accuracy is selected (tie-break: F1, then recall, then lower threshold).
-4. The selected configuration is refit on the full 80% (fresh preprocessing and
-   resampling) and evaluated once on the 20% holdout.
+The file includes a CV helper that compares model/strategy/threshold
+combinations on a stratified 80% development split and selects by mean
+balanced accuracy (then F1, recall, and lower threshold). The command-line
+entry point does not call that helper: it fits the requested model and
+strategy on an 80% split, then explains a sample of the held-out 20%.
 
-ROC-AUC and PR-AUC are reported too. They are threshold-independent, so they
-show how well the model ranks severe vs slight collisions, whatever threshold
-is used.
+The script writes SHAP importance, beeswarm, dependence, and waterfall outputs
+to --out-dir. It accepts a logreg model choice, but SHAP's TreeExplainer is
+intended for the tree models (RF, LightGBM, and XGBoost).
 
-Place in train/ beside train_logreg_imbalance.py.
-
-Example (from repo root):
-    python train/train_combination.py --model all --strategies S0 S1 S2 S3 S4\
-        --thresholds 0.45 0.50 0.55 0.60 --out reports/shap_analysis_results.csv
+Example (from FINAL_CODES/):
+    python train/train_with_shap.py --model xgboost --strategy S0
 """
 import argparse
 import logging
@@ -43,7 +34,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, StandardScaler
 
-# Reuse the SAME engineered features as the original training pipeline.
+# Keep the model feature definitions and row-level engineering in one place.
 from train_logreg_imbalance import CATEGORICAL_COLS, NUMERIC_COLS, engineer_features
 
 from location_features import LocationEncoder, LOC_RAW, LOC_TE
@@ -87,6 +78,7 @@ def make_model(model_name, class_weight, seed):
 
 
 def make_imputer():
+    """Keep numeric columns in place even when a training slice is all missing."""
     # keep_empty_features=True keeps column positions stable even if a numeric
     # column is entirely NaN in some training slice (the second-stage
     # ColumnTransformer addresses columns by position).
@@ -95,9 +87,8 @@ def make_imputer():
 def _attach_names(transform, ohe, ord_cats=None):
     """Attach encoded-column names and their original-feature group to `transform`.
 
-    Column order is always: one-hot categoricals (in CATEGORICAL_COLS order),
-    then NUM_ALL. For S0-S3 the OneHotEncoder saw ordinal codes, so pass the
-    OrdinalEncoder's categories_ to map codes back to the real labels.
+    Encoded columns are one-hot categories first, then NUM_ALL. For S0-S3,
+    map each ordinal code back to the category label used before one-hot encoding.
     """
     names, groups = [], []
     for i, (c, cats) in enumerate(zip(CATEGORICAL_COLS, ohe.categories_)):
@@ -115,7 +106,7 @@ def _attach_names(transform, ohe, ord_cats=None):
 
 
 def fit_model(model_name, strategy, X_fit, y_fit, seed):
-    """Preprocessing and resampling are fitted only on the training slice."""
+    """Fit location encoding, preprocessing, optional balancing, and one model."""
     n_cat = len(CATEGORICAL_COLS)
     scale = model_name == "logreg"   # LR needs standardised numerics; trees don't
 
@@ -187,8 +178,8 @@ def fit_model(model_name, strategy, X_fit, y_fit, seed):
 def compute_metrics(y_true, probabilities, threshold):
     """Classification metrics; positive class = Severe/Fatal (1).
 
-    roc_auc and pr_auc use the raw probabilities, so they do not depend on the
-    threshold (they repeat across thresholds for the same model/strategy/fold).
+    ROC-AUC and PR-AUC use probabilities, so they don't change when the
+    classification threshold changes.
     """
     probabilities = np.asarray(probabilities)
     predicted = (probabilities >= threshold).astype(int)
@@ -209,8 +200,7 @@ def compute_metrics(y_true, probabilities, threshold):
 
 
 def run_holdout_cv(df, target, models, strategies, thresholds, n_splits):
-    """80/20 stratified holdout; per model, select strategy + threshold by
-    stratified k-fold CV on the 80% only, then score the holdout once."""
+    """Select each model's strategy/threshold on dev CV, then score holdout once."""
     X = df[CATEGORICAL_COLS + NUMERIC_COLS + LOC_RAW]
     y = df[target].astype(int)
     if set(y.unique()) != {0, 1}:
@@ -296,8 +286,8 @@ def main():
 
     raw = pd.read_parquet(args.input_path)
     df = engineer_features(raw)
-    # engineer_features drops latitude/longitude (they are in DROP_COLS), but the
-    # location encoder needs them. Re-attach from the raw frame (same index).
+    # Keep raw coordinates available for the location encoder even if feature
+    # engineering has removed them from the working frame.
     df[LOC_RAW] = raw.loc[df.index, LOC_RAW]
 
     cv_results, cv_summary, holdout = run_holdout_cv(

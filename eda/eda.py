@@ -1,7 +1,8 @@
 """
 Deeper EDA on the cleaned collision dataset. Generates modeling-relevant
 visuals (target-rate-by-category, not just raw distributions) and saves
-them as PNGs for the report.
+them as PNGs for the report. These plots describe associations in the data;
+they do not establish causes or measure held-out model performance.
 """
 
 import argparse
@@ -63,6 +64,7 @@ HAS_FLAGS = ["has_motorcycle", "has_hgv", "has_pedestrian", "has_cyclist", "has_
 
 
 def savefig(fig, out_dir: Path, name: str):
+    """Save one figure as a PNG and close it to release plotting memory."""
     path = out_dir / f"{name}.png"
     fig.savefig(path, bbox_inches="tight", dpi=150)
     plt.close(fig)
@@ -87,6 +89,7 @@ def plot_target_distribution(df: pd.DataFrame, out_dir: Path):
 # Severity rate by category (the most modeling-relevant chart)
 
 def plot_rate_by_category(df: pd.DataFrame, out_dir: Path):
+    """Plot severe/fatal outcome rates for each configured category."""
     baseline = df[TARGET].mean()
     for col in CATEGORICAL_FOR_RATE:
         if col not in df.columns:
@@ -170,6 +173,7 @@ def plot_temporal_patterns(df: pd.DataFrame, out_dir: Path):
 #Geospatial
 
 def plot_geospatial(df: pd.DataFrame, out_dir: Path):
+    """Map average target rates by location; this is descriptive EDA only."""
     if not {"latitude", "longitude"}.issubset(df.columns):
         return
     fig, ax = plt.subplots(figsize=(7, 8))
@@ -263,6 +267,7 @@ def plot_engineering_sanity_checks(df: pd.DataFrame, out_dir: Path):
 # Main
 
 def run_eda(df: pd.DataFrame, out_dir: Path):
+    """Run each EDA plot and write the resulting figures to the output folder."""
     out_dir.mkdir(parents=True, exist_ok=True)
     plot_target_distribution(df, out_dir)
     plot_rate_by_category(df, out_dir)

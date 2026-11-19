@@ -1,6 +1,7 @@
 """
-Merges UK STATS19 collision / vehicle / casualty CSVs into a single
-one-row-per-collision parquet file, ready for preprocess.py.
+Build a one-row-per-collision dataset from the UK STATS19 collision,
+vehicle, and casualty CSVs. The resulting parquet is the input to
+clean_dataset.py.
 """
 
 import argparse
@@ -84,6 +85,7 @@ def apply_missing_codes(df: pd.DataFrame) -> pd.DataFrame:
 # Loading raw tables 
 
 def load_table(data_dir: str, table: str, years: list[int]) -> pd.DataFrame:
+    """Load one raw STATS19 table and keep only the requested collision years."""
     path = Path(data_dir) / RAW_FILENAMES[table]
     if not path.exists():
         raise FileNotFoundError(
@@ -107,7 +109,7 @@ def load_table(data_dir: str, table: str, years: list[int]) -> pd.DataFrame:
 
 
 # 
-# Vehicle table -> per-collision aggregates
+# Roll up vehicle rows so each collision still has just one row.
 def aggregate_vehicles(vehicle_df: pd.DataFrame) -> pd.DataFrame:
     df = apply_missing_codes(vehicle_df)
 
@@ -136,6 +138,7 @@ def aggregate_vehicles(vehicle_df: pd.DataFrame) -> pd.DataFrame:
 
 #Casualty table -> per-collision aggregates
 def aggregate_casualties(casualty_df: pd.DataFrame) -> pd.DataFrame:
+    """Create the currently-used pedestrian/cyclist flags per collision."""
     df = apply_missing_codes(casualty_df)
 
     df["is_pedestrian"] = df["casualty_class"] == 3
@@ -183,6 +186,7 @@ COLLISION_DROP_COLS = [
 
 
 def build_collision_base(collision_df: pd.DataFrame) -> pd.DataFrame:
+    """Create collision-level fields, targets, and time features."""
     df = apply_missing_codes(collision_df)
 
     df["target_severe_fatal"] = df["collision_severity"].isin([1, 2]).astype(int)
@@ -217,6 +221,7 @@ EXPECTED_MIN_COLUMNS = {
 
 
 def build_dataset(data_dir: str, years: list[int]) -> pd.DataFrame:
+    """Join collision records to vehicle and casualty aggregates."""
     collision_raw = load_table(data_dir, "collision", years)
     vehicle_raw = load_table(data_dir, "vehicle", years)
     casualty_raw = load_table(data_dir, "casualty", years)
@@ -233,6 +238,7 @@ def build_dataset(data_dir: str, years: list[int]) -> pd.DataFrame:
         f"a join key is duplicated somewhere — check vehicle/casualty aggregation."
     )
 
+    # Keep casualty counts out of the model dataset; they are outcome-adjacent.
     # n_casualties_listed is derived from the casualty table and carries the
     # same leakage risk as collision.number_of_casualties (both correlate
     # mechanically with severity rather than being purely pre-crash

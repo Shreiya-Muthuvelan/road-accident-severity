@@ -15,27 +15,22 @@ What this does, and why (see report paragraph / team notes for full detail):
   2. Drops the ~34 rows missing `longitude`/`latitude` — coordinates can't
      be meaningfully imputed without placing a crash somewhere it didn't
      happen, and the row loss is negligible.
-  3. Low-missingness categoricals (<3%) get an explicit "Missing" category
-     rather than mode imputation, for consistency with (4) below.
-  4. Moderate/high-missingness categoricals (5-45%) — these come from
-     STATS19 fields that used -1/9/99 for "unknown (self reported)", i.e.
-     "unknown" is itself a real recorded state, not noise. Filled with an
-     explicit "Missing" category, never imputed to the mode.
-  5. Age-related numeric fields: implausible outliers (drivers 100+,
-     vehicles 100+ years old) are treated as data-entry errors and nulled
-     BEFORE imputation, then median-imputed with a companion `_was_missing`
-     binary flag added per column, since missingness here is unlikely to
-     be random (e.g. correlates with hit-and-run / self-report gaps).
+  3. The configured categorical columns get an explicit "Missing" category
+     instead of mode imputation.
+  4. Implausible age values are turned into NaN, and each age column gets a
+     `_was_missing` flag. Numeric values are not imputed in this script;
+     model training handles numeric imputation within each training fold.
+  5. Inverted min/max age pairs are swapped after cleaning, and missing
+     `share_male_drivers` values get a `_was_missing` flag.
   6. `first_road_number` / `second_road_number` are dropped (high-
      cardinality IDs, not ordinal magnitudes) in favour of a binary
-     `is_classified_road` / `is_classified_second_road` flag derived from
-     whether the number is 0 (unclassified, per STATS19 codebook) or not.
+     `is_classified_road` / `is_classified_second_road` flag. A nonzero
+     road number is classified; zero or missing is treated as unclassified.
 
-NOTE: ideally the age-outlier capping in step 5 would happen on the raw
-per-vehicle/per-casualty rows in build_dataset.py, before min/max/mean
-aggregation — an outlier polluting a `max_driver_age` aggregate is exactly
-the bug this step is patching after the fact. Left here for now since
-that's where the data currently lives; consider moving upstream later.
+NOTE: ideally age cleaning would happen on the raw per-vehicle and
+per-casualty rows in build_dataset.py, before min/max/mean aggregation.
+This script only sees the aggregated age fields, so it can flag or null an
+implausible aggregate but cannot reconstruct the original row-level values.
 """
 
 import argparse
@@ -115,6 +110,7 @@ ROAD_NUMBER_COLS = {
 # Steps
 # ---------------------------------------------------------------------------
 def drop_fully_missing(df: pd.DataFrame) -> pd.DataFrame:
+    """Drop configured columns that are entirely or almost entirely empty."""
     present = [c for c in FULLY_MISSING_COLS if c in df.columns]
     if present:
         null_fracs = df[present].isnull().mean()
@@ -130,6 +126,7 @@ def drop_fully_missing(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def drop_missing_coordinates(df: pd.DataFrame) -> pd.DataFrame:
+    """Remove rows without coordinates rather than inventing crash locations."""
     before = len(df)
     df = df.dropna(subset=[c for c in COORD_COLS if c in df.columns])
     dropped = before - len(df)
@@ -138,6 +135,7 @@ def drop_missing_coordinates(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def fill_categoricals_with_missing_label(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
+    """Keep unknown category values visible as an explicit category."""
     df = df.copy()
     for col in cols:
         if col not in df.columns:
@@ -150,6 +148,7 @@ def fill_categoricals_with_missing_label(df: pd.DataFrame, cols: list[str]) -> p
 
 
 def clean_age_fields(df: pd.DataFrame) -> pd.DataFrame:
+    """Null implausible ages and remember which values were missing."""
     df = df.copy()
     for col, (low, high) in AGE_COLUMNS_TO_CLEAN.items():
         if col not in df.columns:
@@ -196,6 +195,7 @@ def fix_inverted_min_max(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def clean_proportion_fields(df: pd.DataFrame) -> pd.DataFrame:
+    """Add missingness flags to proportion fields without imputing them."""
     df = df.copy()
     for col in PROPORTION_COLUMNS:
         if col not in df.columns:
@@ -208,6 +208,7 @@ def clean_proportion_fields(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def simplify_road_numbers(df: pd.DataFrame) -> pd.DataFrame:
+    """Replace road-number IDs with binary classified-road indicators."""
     df = df.copy()
     for raw_col, flag_col in ROAD_NUMBER_COLS.items():
         if raw_col not in df.columns:
@@ -231,6 +232,7 @@ def fill_moderate_high_missing_categoricals(df: pd.DataFrame) -> pd.DataFrame:
 # Pipeline
 # ---------------------------------------------------------------------------
 def clean_dataset(df: pd.DataFrame) -> pd.DataFrame:
+    """Apply the cleaning steps and report any nulls that remain."""
     n_start = len(df)
 
     df = drop_fully_missing(df)

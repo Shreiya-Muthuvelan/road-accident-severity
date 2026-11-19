@@ -1,7 +1,8 @@
 """
-Trains Logistic Regression under all 6 imbalance-handling strategies from
-the proposal (S0-S5), evaluated with repeated stratified
-k-fold CV (Protocol A).
+Train Logistic Regression with repeated stratified CV (Protocol A).
+Each outer fold uses a validation slice to choose a threshold and a separate
+test slice for scoring. The run reports the baseline and strategies S0-S4;
+S5 is an output alias for S0 scored at its validation-tuned threshold.
 """
 
 import argparse
@@ -34,16 +35,13 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
 
 # Feature configuration
-# Columns dropped entirely for this model (identifiers, redundant-with-
-# engineered-feature raw columns, and — per the driver-age/lat-long
-# discussion — collinear raw ages and raw coordinates).
+# Drop identifiers, raw columns replaced by engineered features, and
+# collinear ages. Coordinates aren't in this model's feature lists, but stay
+# in the dataframe for other scripts that use them.
 DROP_COLS = [
     "collision_index",
     "collision_year",   # kept aside for temporal split later, not fed to CV model
     "hour",              # superseded by hour_sin / hour_cos
-    #"latitude",
-    #"longitude",         # no separate location feature currently retained for LR;
-                          # police_force is the coarse location proxy that remains
     "min_driver_age",
     "max_driver_age",    # replaced by mean_driver_age + driver_age_range below
 ]
@@ -129,6 +127,7 @@ STRATEGIES = ["S0", "S1", "S2", "S3", "S4"]
 # Feature engineering
 
 def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Add row-level predictors and check that all configured model columns exist."""
     df = df.copy()
     df["driver_age_range"] = df["max_driver_age"] - df["min_driver_age"]
     # --- Row-wise engineered features (no cross-row statistics -> no leakage) ---
@@ -151,9 +150,7 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     
     df = df.drop(columns=[c for c in DROP_COLS if c in df.columns], errors="ignore")
 
-    # Categorical columns may be a mix of int codes and the "Missing"
-    # string from clean_dataset.py — cast to str uniformly so OrdinalEncoder
-    # / OneHotEncoder see one consistent dtype per column.
+    # Keep each category column one consistent type for sklearn's encoders.
     for col in CATEGORICAL_COLS:
         if col in df.columns:
             df[col] = df[col].astype(str)
@@ -168,6 +165,7 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
 # Strategy-specific fit
 
 def fit_strategy(strategy: str, X_fit: pd.DataFrame, y_fit: pd.Series, seed: int) -> dict:
+    """Fit preprocessing, optional resampling, and Logistic Regression on one fit slice."""
     n_cat = len(CATEGORICAL_COLS)
     n_num = len(NUMERIC_COLS)
 
@@ -223,6 +221,7 @@ def fit_strategy(strategy: str, X_fit: pd.DataFrame, y_fit: pd.Series, seed: int
 
 
 def predict_proba(fitted: dict, X: pd.DataFrame) -> np.ndarray:
+    """Apply the fitted preprocessing and return positive-class probabilities."""
     if fitted["kind"] == "onehot":
         X_enc = fitted["pre"].transform(X)
     else:
@@ -234,6 +233,7 @@ def predict_proba(fitted: dict, X: pd.DataFrame) -> np.ndarray:
 # Threshold tuning + metrics
 
 def tune_threshold(y_val: np.ndarray, probs_val: np.ndarray, mode: str, target_recall: float) -> float:
+    """Choose a decision threshold from validation predictions only."""
     precisions, recalls, thresholds = precision_recall_curve(y_val, probs_val)
     precisions, recalls = precisions[:-1], recalls[:-1]  # align with thresholds
 
@@ -279,6 +279,7 @@ def run_cv(
     threshold_mode: str,
     target_recall: float,
 ) -> pd.DataFrame:
+    """Run repeated stratified CV with fold-local validation threshold tuning."""
     X = df[CATEGORICAL_COLS + NUMERIC_COLS]
     y = df[target].astype(int)
 
@@ -295,9 +296,8 @@ def run_cv(
         X_train_full, y_train_full = X.iloc[train_idx], y.iloc[train_idx]
         X_test, y_test = X.iloc[test_idx], y.iloc[test_idx]
 
-        # Stratified 25% validation slice from the training fold, used only
-        # for threshold selection. Resampling touches the remaining 75%
-        # ("fit" portion) only — never the val or test data.
+        # Use a validation slice to tune the threshold; only the fit slice is
+        # passed to the sampler or model.
         X_fit, X_val, y_fit, y_val = train_test_split(
             X_train_full, y_train_full, test_size=0.25, stratify=y_train_full, random_state=seed
         )
@@ -335,6 +335,7 @@ def run_cv(
             results.append(row_tuned)
 
             if strategy == "S0":
+                # S5 is just the S0 validation-tuned result under a second label.
                 row_s5 = dict(row_tuned)
                 row_s5["strategy"] = "S5"
                 results.append(row_s5)

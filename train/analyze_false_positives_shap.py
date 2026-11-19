@@ -1,11 +1,14 @@
-"""SHAP false-positive diagnostics for the existing XGBoost severity pipeline.
+"""Inspect XGBoost false positives and their SHAP contributions.
 
 Place in train/ and run from the repository root:
  python train/analyze_false_positives_shap.py --strategy S1 --threshold 0.50
 
-Uses the same stratified 80/20 split and fit_model() as train_combination.py.
-SHAP is calculated on a reproducible sample per confusion-matrix group.
-The entire holdout is used for classification counts and group rates.
+The script fits the requested strategy on a stratified 80% development split
+and scores the untouched 20% holdout at a fixed threshold. It uses the full
+holdout for confusion counts and motorcycle-group rates, then calculates SHAP
+on a reproducible sample from each non-empty confusion-matrix group.
+It imports fit_model from train_combination_2.py, which must be available in
+the train folder.
 """
 import argparse
 import inspect
@@ -49,6 +52,7 @@ def encoded_feature_names(transform, n_features):
 
 
 def positive_shap(explainer, matrix):
+    """Return SHAP values for the positive (severe/fatal) class."""
     values = explainer.shap_values(matrix)
     if isinstance(values, list):
         values = values[1]

@@ -1,26 +1,14 @@
-"""RF / LightGBM / XGBoost severity evaluation with FIXED thresholds.
+"""Tune imbalance strength for several classifiers and evaluate fixed thresholds.
 
-Protocol (identical for every model)
-------------------------------------
-1. A stratified 20% holdout is split off first (random_state=42) and is NOT
-   touched until the very end. The same rows are used for every model.
-2. On the remaining 80% ("development" set), stratified 5-fold CV is run for
-   every (model, strategy, threshold) combination. Encoders, imputer and
-   resamplers are fitted on the training portion of each fold only.
-3. For each model SEPARATELY, the (strategy, threshold) pair with the best mean
-   CV balanced accuracy is selected (tie-break: F1, then recall, then lower threshold).
-4. The selected configuration is refit on the full 80% (fresh preprocessing and
-   resampling) and evaluated once on the 20% holdout.
+The script splits off a stratified 20% holdout, then uses stratified CV on the
+remaining 80% to choose a model's strategy, balancing parameter, and threshold.
+Selection uses mean balanced accuracy, with F1, recall, then lower threshold
+as tie-breakers. The selected configuration is refit on the full development
+split and scored once on the holdout.
 
-ROC-AUC and PR-AUC are reported too. They are threshold-independent, so they
-show how well the model ranks severe vs slight collisions, whatever threshold
-is used.
-
-Place in train/ beside train_logreg_imbalance.py.
-
-Example (from repo root):
-    python train/train_combination.py --model all --strategies S0 S1 S2 S3 S4\
-        --thresholds 0.45 0.50 0.55 0.60 --out reports/all_model_results.csv
+Example (from FINAL_CODES/):
+    python train/tuning_of_sampling_techniques.py --model lightgbm \\
+        --strategies S0 S1 S2 S3 S4 --out report/tuning.csv
 """
 import argparse
 import logging
@@ -43,11 +31,11 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, StandardScaler
 
-# Reuse the SAME engineered features as the original training pipeline.
+# Share the feature definitions and row-level engineering with the LR script.
 from train_logreg_imbalance import CATEGORICAL_COLS, NUMERIC_COLS, engineer_features
 
 from location_features import LocationEncoder, LOC_RAW, LOC_TE
-# raw coords + 2 target-encoded cells are all numeric
+# Coordinates and their two grid-based target encodings join the numeric inputs.
 NUM_ALL = NUMERIC_COLS + LOC_RAW + LOC_TE
 
 LOG = logging.getLogger(__name__)
@@ -96,6 +84,7 @@ def make_model(model_name, class_weight, seed):
 
 
 def make_imputer():
+    """Preserve numeric-column positions if a fold has an entirely empty column."""
     # keep_empty_features=True keeps column positions stable even if a numeric
     # column is entirely NaN in some training slice (the second-stage
     # ColumnTransformer addresses columns by position).
@@ -103,11 +92,11 @@ def make_imputer():
 
 
 def fit_model(model_name, strategy, X_fit, y_fit, seed, param=0.0):
-    """Preprocessing and resampling are fitted only on the training slice."""
+    """Fit preprocessing and the requested balancing setup on one training slice."""
     n_cat = len(CATEGORICAL_COLS)
     scale = model_name == "logreg"   # LR needs standardised numerics; trees don't
 
-    # fit the location encoder on the training slice only
+    # Learn location target rates from this fit slice, never from validation data.
     loc = LocationEncoder(seed=seed)
     X_fit = loc.fit_transform(X_fit, y_fit)
 
@@ -173,8 +162,7 @@ def fit_model(model_name, strategy, X_fit, y_fit, seed, param=0.0):
 def compute_metrics(y_true, probabilities, threshold):
     """Classification metrics; positive class = Severe/Fatal (1).
 
-    roc_auc and pr_auc use the raw probabilities, so they do not depend on the
-    threshold (they repeat across thresholds for the same model/strategy/fold).
+    ROC-AUC and PR-AUC use probabilities, so they don't change with the threshold.
     """
     probabilities = np.asarray(probabilities)
     predicted = (probabilities >= threshold).astype(int)
@@ -195,8 +183,7 @@ def compute_metrics(y_true, probabilities, threshold):
 
 
 def run_holdout_cv(df, target, models, strategies, thresholds, n_splits):
-    """80/20 stratified holdout; per model, select strategy + threshold by
-    stratified k-fold CV on the 80% only, then score the holdout once."""
+    """Tune balancing parameters on dev CV, then evaluate each model once on holdout."""
     X = df[CATEGORICAL_COLS + NUMERIC_COLS + LOC_RAW]
     y = df[target].astype(int)
     if set(y.unique()) != {0, 1}:
@@ -283,8 +270,8 @@ def main():
 
     raw = pd.read_parquet(args.input_path)
     df = engineer_features(raw)
-    # engineer_features drops latitude/longitude (they are in DROP_COLS), but the
-    # location encoder needs them. Re-attach from the raw frame (same index).
+    # Keep coordinates available for the location encoder, even if an
+    # upstream feature step removed them from the working frame.
     df[LOC_RAW] = raw.loc[df.index, LOC_RAW]
 
     cv_results, cv_summary, holdout = run_holdout_cv(

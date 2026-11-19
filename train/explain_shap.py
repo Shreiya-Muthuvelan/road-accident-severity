@@ -1,8 +1,8 @@
-"""SHAP explainability for the tree models (RF / LightGBM / XGBoost).
+"""Explain a selected tree model on a sample of the held-out collision data.
 
-Re-fits the chosen (model, strategy) on the 80% development split using the
-exact same pipeline as train_combination.py (same split, same seed), then
-explains predictions on a sample of the untouched 20% holdout.
+The script fits the requested model and strategy on a stratified 80% development
+split, then explains up to --n-samples rows from the 20% holdout. It does not
+run CV to choose the model or strategy.
 
 Outputs (in --out-dir):
   shap_importance_grouped.csv   mean |SHAP| per ORIGINAL feature (one-hot columns summed)
@@ -11,10 +11,9 @@ Outputs (in --out-dir):
   shap_dependence_<feat>.png    dependence plot for the top numeric feature
   shap_waterfall_top_risk.png   local explanation for the highest-risk sample
 
-Requires train_combination.py to expose transform.feature_names /
-transform.feature_groups (see the patch to fit_model).
-
-Place in train/. Example (from repo root):
+This file imports fit_model from train_combination_2.py, which must be
+available in the train folder and attach transform.feature_names /
+transform.feature_groups. Example (from FINAL_CODES/):
     python train/explain_shap.py --model xgboost --strategy S0 --n-samples 3000
 """
 import argparse
@@ -38,11 +37,12 @@ LOG = logging.getLogger(__name__)
 
 
 def to_dense(a):
+    """Convert a sparse matrix to an array, leaving dense input as an array."""
     return a.toarray() if sparse.issparse(a) else np.asarray(a)
 
 
 def positive_class_shap(explainer, X):
-    """Return (n, f) SHAP values and a scalar base value for class 1."""
+    """Return SHAP values for class 1 and its expected/base model output."""
     sv = explainer.shap_values(X)
     if isinstance(sv, list):          # older shap/LightGBM: [class0, class1]
         sv = sv[1]
@@ -68,8 +68,8 @@ def main():
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)
 
-    # engineer_features drops latitude/longitude (DROP_COLS) but the location
-    # encoder needs them, so re-attach from the raw frame.
+    # Keep coordinates available for the location encoder, even if feature
+    # engineering removed them from the working frame.
     raw = pd.read_parquet(args.input_path)
     df = engineer_features(raw)
     for c in LOC_RAW:
