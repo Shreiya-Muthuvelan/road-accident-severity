@@ -20,18 +20,44 @@ Steps 1 and 2 below regenerate both Parquet files from the CSVs.
 
 ## Project structure
 
-`data/` contains the datasets, `src/` prepares them, `eda/` explores them, `train/` runs the experiments, and `report/` stores the results.
+```text
+.
+├── data/                                     # Raw and processed STATS19 data
+│   ├── collision-last-5-years.csv            # Raw STATS19 collision records
+│   ├── vehicle-last-5-years.csv              # Raw vehicle records
+│   ├── casualty-last-5-years.csv             # Raw casualty records
+│   ├── collisions.parquet                    # Merged collision-level dataset
+│   └── collisions_clean.parquet              # Cleaned dataset used for training
+│
+├── src/                                      # Dataset preparation
+│   ├── build_dataset.py                      # Builds one row per collision and creates the targets
+│   └── clean_dataset.py                      # Cleans values and adds missingness and road flags
+│
+├── eda/                                      # Exploratory data analysis
+│   ├── eda.py                                # Generates exploratory figures
+│   └── diagnostic_eda.ipynb                  # Interactive exploration of the collision table
+│
+├── train/                                    # Model training and evaluation
+│   ├── train_logreg_imbalance.py             # Shared features and repeated-CV Logistic Regression
+│   ├── location_features.py                  # Out-of-fold location target encoding
+│   ├── train_with_shap.py                    # Four-model CV and final holdout evaluation
+│   ├── tuning_of_sampling_techniques.py      # Compares class weights and sampling ratios
+│   ├── explain_shap.py                       # Generates SHAP explanations¹
+│   └── analyze_false_positives_shap.py       # Analyzes false positives using SHAP¹
+│
+├── report/                                   # Saved results and figures
+│   ├── figures/                              # Exploratory plots and a saved confusion matrix
+│   ├── final_results/                        # Four-model CV and holdout results
+│   ├── tuning_of_sampling_techniques/        # Sampling-strength experiment results
+│   └── shap/                                 # Saved SHAP plots and tables
+│       └── false_positive_analysis/          # Saved false-positive plots and tables
+│
+├── architecture_diagram.png                  # Project workflow diagram
+├── requirements.txt                          # Python dependencies
+└── README.md                                 # Project overview and run commands
+```
 
-| Script | Purpose |
-| --- | --- |
-| `src/build_dataset.py` | Filters the raw tables by year, creates the targets, and aggregates vehicle and casualty records before joining them to collisions. |
-| `src/clean_dataset.py` | Cleans category values, flags age and other missingness, and creates road classification flags. |
-| `eda/eda.py` | Generates descriptive figures from the cleaned data. The diagnostic notebook explores the earlier collision-level table. |
-| `train/train_logreg_imbalance.py` | Defines shared features and runs a separate repeated-CV Logistic Regression experiment. |
-| `train/location_features.py` | Implements smoothed, out-of-fold location target encoding for the holdout experiments. |
-| `train/train_with_shap.py` | Runs the four-model development CV and final holdout comparison. |
-| `train/tuning_of_sampling_techniques.py` | Runs a separate development CV and holdout experiment that varies the strength of class weighting and oversampling. |
-| `train/explain_shap.py` and `train/analyze_false_positives_shap.py` | Generate model explanations and analyze false positives when their shared training module is available. |
+¹ Both SHAP scripts require `train_combination_2.py`, which is absent from this checkout.
 
 ## Run the project
 
