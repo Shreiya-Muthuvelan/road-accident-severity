@@ -127,6 +127,7 @@ def aggregate_vehicles(vehicle_df: pd.DataFrame) -> pd.DataFrame:
         max_vehicle_age=("age_of_vehicle", "max"),
         #any_skidded=("skidding_and_overturning", lambda s: (s.fillna(0) > 0).any()),
         #any_left_carriageway=("vehicle_leaving_carriageway", lambda s: (s.fillna(0) > 0).any()),
+        #exclue these two as they are not pre-crash information, but rather a consequence of the crash
     ).reset_index()
 
     for col in ["has_motorcycle", "has_hgv"]: #, "any_skidded", "any_left_carriageway"]:
