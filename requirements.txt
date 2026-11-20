@@ -1,8 +1,13 @@
 fastparquet>=2026.9.0
-imblearn>=0.0
+imbalanced-learn
+lightgbm
 matplotlib>=3.11.2
 numpy>=2.5.3
 pandas>=3.0.6
 pyarrow>=25.0.1
 scikit-learn>=1.9.1
+scipy
 seaborn>=0.13.2
+shap
+xgboost
+ipykernel
